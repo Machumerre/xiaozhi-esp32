@@ -103,18 +103,14 @@ void SparkBotDisplay::SetupUI() {
     BuildFace();
 }
 
-// Subtítulos con la fuente de consola. Lo que no tenga la fuente (emojis, otros alfabetos)
-// lo dibuja la fuente original del robot, que recibe esas letras del servidor.
+// Subtítulos con la fuente de consola. Ojo: sin fuente de respaldo, porque la fuente del tema
+// se sustituye al cargar los recursos y un puntero a la antigua hacía que el robot se colgara.
+// Lo que no tenga la fuente (emojis, otros alfabetos) simplemente no se dibuja.
 void SparkBotDisplay::StyleSubtitles() {
     if (chat_message_label_ == nullptr) {
         return;
     }
-    static lv_font_t subtitle_font = font_mono_18;
-    auto theme_font = current_theme_ != nullptr ? current_theme_->GetTextFont() : nullptr;
-    if (theme_font != nullptr) {
-        subtitle_font.fallback = theme_font->font();
-    }
-    lv_obj_set_style_text_font(chat_message_label_, &subtitle_font, 0);
+    lv_obj_set_style_text_font(chat_message_label_, &font_mono_18, 0);
     lv_obj_set_style_text_color(chat_message_label_, lv_color_hex(0xCFF6FF), 0);
     if (bottom_bar_ != nullptr) {
         lv_obj_set_style_bg_color(bottom_bar_, lv_color_hex(0x000000), 0);
