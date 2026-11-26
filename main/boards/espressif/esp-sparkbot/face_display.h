@@ -18,6 +18,7 @@ public:
 
     virtual void SetupUI() override;
     virtual bool SetEmotion(const char* emotion) override;
+    virtual void SetChatMessage(const char* role, const char* content) override;
 
 private:
     enum class Shape { kNormal, kHappy, kSad, kAngry, kSurprised, kSleepy, kThinking, kWink };
@@ -43,7 +44,44 @@ private:
     float gaze_x_ = 0, gaze_y_ = 0;
     float target_x_ = 0, target_y_ = 0;
 
+    // Pantalla de "pensando": reactor con anillos que giran
+    static constexpr int kTicks = 48;
+    lv_obj_t* think_ = nullptr;
+    lv_obj_t* think_arcs_[4] = {};
+    lv_obj_t* think_core_ = nullptr;
+    lv_obj_t* think_time_ = nullptr;
+    lv_obj_t* think_label_ = nullptr;
+    lv_obj_t* think_ticks_[kTicks] = {};
+    uint8_t think_tick_level_[kTicks] = {};
+    lv_obj_t* think_orbit_[3] = {};
+    bool thinking_ = false;
+    bool think_visible_ = false;
+    uint32_t think_start_ms_ = 0;
+
+    // Iconos tipo smartwatch (wifi y batería)
+    lv_obj_t* wifi_bars_[4] = {};
+    lv_obj_t* battery_ = nullptr;
+    lv_obj_t* battery_fill_ = nullptr;
+    lv_obj_t* battery_text_ = nullptr;
+    int last_wifi_level_ = -1;
+    int last_battery_ = -2;
+
+    // Reloj de reposo
+    lv_obj_t* clock_ = nullptr;
+    lv_obj_t* clock_time_ = nullptr;
+    lv_obj_t* clock_date_ = nullptr;
+    bool clock_visible_ = false;
+    int last_clock_second_ = -1;
+
     void BuildFace();
+    void BuildClock();
+    void BuildStatusIcons();
+    void UpdateStatusIcons();
+    void StyleSubtitles();
+    void UpdateClock(bool idle);
+    void BuildThinking();
+    void ShowThinking(bool show);
+    void AnimateThinking();
     void ApplyShape();
     static void TimerCallback(lv_timer_t* timer);
     void OnTimer();

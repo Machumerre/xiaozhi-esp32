@@ -9,7 +9,9 @@
 
 // Fuente JetBrains Mono (licencia OFL) convertida para LVGL
 LV_FONT_DECLARE(font_mono_14);  // normal, texto pequeño
+LV_FONT_DECLARE(font_mono_18);  // normal, subtítulos
 LV_FONT_DECLARE(font_mono_20);  // negrita, texto mediano
+LV_FONT_DECLARE(font_mono_36);  // negrita, solo "0123456789:- " (reloj)
 LV_FONT_DECLARE(font_mono_56);  // negrita, solo "0123456789:-%° "
 LV_FONT_DECLARE(font_mono_80);  // negrita, solo cifras
 
