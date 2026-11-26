@@ -12,6 +12,7 @@
 #include "agenda_screen.h"
 #include "companion.h"
 #include "expert_ai.h"
+#include "nav_screen.h"
 #include "face_display.h"
 
 #include <driver/i2c_master.h>
@@ -59,6 +60,7 @@ private:
     AlarmScreen* alarm_screen_ = nullptr;
     AgendaScreen* agenda_screen_ = nullptr;
     ExpertAi* expert_ai_ = nullptr;
+    NavScreen* nav_screen_ = nullptr;
 
     void InitializeI2c() {
         // Initialize I2C peripheral
@@ -325,6 +327,8 @@ public:
         Companion::Get().RegisterTools();
         expert_ai_ = new ExpertAi();
         expert_ai_->RegisterTools();
+        nav_screen_ = new NavScreen(display_);
+        nav_screen_->RegisterTools();
         GetBacklight()->RestoreBrightness();
     }
 
