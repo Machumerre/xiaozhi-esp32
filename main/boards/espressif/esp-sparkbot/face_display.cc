@@ -499,7 +499,9 @@ void SparkBotDisplay::OnTimer() {
         ShowThinking(want_thinking);
     }
     UpdateClock(state == kDeviceStateIdle && !want_thinking);
-    if (ticks_ % 50 == 1) {
+    // Ojo: mientras arranca, la placa aún se está creando y no se le puede preguntar nada
+    const bool board_ready = state != kDeviceStateUnknown && state != kDeviceStateStarting;
+    if (board_ready && ticks_ % 50 == 1) {
         UpdateStatusIcons();
     }
     if (think_visible_) {
