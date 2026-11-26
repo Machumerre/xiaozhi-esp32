@@ -8,6 +8,10 @@
 #include "wifi_board.h"
 #include "study_screens.h"
 #include "weather_screen.h"
+#include "alarm_screen.h"
+#include "agenda_screen.h"
+#include "companion.h"
+#include "expert_ai.h"
 #include "face_display.h"
 
 #include <driver/i2c_master.h>
@@ -52,6 +56,9 @@ private:
     light_mode_t light_mode_ = LIGHT_MODE_ALWAYS_ON;
     StudyScreens* study_screens_ = nullptr;
     WeatherScreen* weather_screen_ = nullptr;
+    AlarmScreen* alarm_screen_ = nullptr;
+    AgendaScreen* agenda_screen_ = nullptr;
+    ExpertAi* expert_ai_ = nullptr;
 
     void InitializeI2c() {
         // Initialize I2C peripheral
@@ -87,6 +94,11 @@ private:
             auto& app = Application::GetInstance();
             if (app.GetDeviceState() == kDeviceStateStarting) {
                 EnterWifiConfigMode();
+                return;
+            }
+            // Si suena una alarma, el botón la apaga y da los buenos días
+            if (alarm_screen_ != nullptr && alarm_screen_->IsRinging()) {
+                alarm_screen_->Dismiss(true);
                 return;
             }
             app.ToggleChatState();
@@ -305,6 +317,13 @@ public:
         study_screens_->RegisterTools();
         weather_screen_ = new WeatherScreen(display_);
         weather_screen_->RegisterTools();
+        alarm_screen_ = new AlarmScreen(display_);
+        alarm_screen_->RegisterTools();
+        agenda_screen_ = new AgendaScreen(display_);
+        agenda_screen_->RegisterTools();
+        Companion::Get().RegisterTools();
+        expert_ai_ = new ExpertAi();
+        expert_ai_->RegisterTools();
         GetBacklight()->RestoreBrightness();
     }
 

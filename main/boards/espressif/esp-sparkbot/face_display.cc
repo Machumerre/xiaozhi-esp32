@@ -3,6 +3,8 @@
 
 #include "application.h"
 #include "board.h"
+#include "companion.h"
+#include "assets/lang_config.h"
 #include "display/lvgl_display/lvgl_font.h"
 #include "screen_kit.h"
 
@@ -156,6 +158,8 @@ void SparkBotDisplay::BuildFace() {
     ApplyShape();
     BuildStatusIcons();
     BuildClock();
+    BuildFooter();
+    BuildBoot();
     BuildThinking();
     timer_ = lv_timer_create(&SparkBotDisplay::TimerCallback, 40, this);
 }
@@ -214,9 +218,155 @@ void SparkBotDisplay::UpdateStatusIcons() {
     const uint32_t color = charging ? kit::kHudCyan : (level <= 15 ? 0xFF4A4A : (level <= 35 ? 0xFFB300 : 0x4DFFA0));
     lv_obj_set_width(battery_fill_, std::max(2, 20 * level / 100));
     lv_obj_set_style_bg_color(battery_fill_, lv_color_hex(color), 0);
-    char text[8];
+    char text[24];
     snprintf(text, sizeof(text), "%d%%", level);
     lv_label_set_text(battery_text_, text);
+}
+
+// ---------------------------------------------------------------------------
+// Pie de reposo y subida de nivel
+// ---------------------------------------------------------------------------
+
+void SparkBotDisplay::BuildFooter() {
+    footer_ = kit::Group(face_, 0, 168, 240, 36);
+    lv_obj_add_flag(footer_, LV_OBJ_FLAG_HIDDEN);
+    footer_label_ = kit::Centered(footer_, 0, &font_mono_14, kit::kHudDim, 224);
+    kit::Box(footer_, 70, 22, 100, 3, 1, kit::kHudLine);
+    xp_bar_ = kit::Box(footer_, 70, 22, 2, 3, 1, kit::kHudCyan);
+}
+
+void SparkBotDisplay::UpdateFooter() {
+    auto& companion = Companion::Get();
+    const int new_level = companion.TakeLevelUp();
+    if (new_level > 0) {
+        ShowLevelUp(new_level);
+    }
+    const auto s = companion.GetSnapshot();
+    char text[64];
+    if (s.streak > 0) {
+        snprintf(text, sizeof(text), "NV %d \u00B7 RACHA %d \u00B7 HOY %d'", s.level, s.streak, s.today_minutes);
+    } else {
+        snprintf(text, sizeof(text), "NV %d \u00B7 HOY %d'", s.level, s.today_minutes);
+    }
+    lv_label_set_text(footer_label_, text);
+    kit::SetColor(footer_label_, s.streak > 0 && !s.studied_today ? 0xFFB300 : kit::kHudDim);
+    const int span = std::max(1, s.next_level_xp - s.level_start_xp);
+    const int filled = std::max(2, std::min(100, (s.xp - s.level_start_xp) * 100 / span));
+    lv_obj_set_width(xp_bar_, filled);
+}
+
+void SparkBotDisplay::ShowLevelUp(int level) {
+    if (levelup_ == nullptr) {
+        levelup_ = kit::Overlay();
+        levelup_ring_ = kit::Box(levelup_, 120, 112, 0, 0, LV_RADIUS_CIRCLE, 0x000000);
+        lv_obj_set_style_bg_opa(levelup_ring_, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(levelup_ring_, 3, 0);
+        lv_obj_set_style_border_color(levelup_ring_, lv_color_hex(kCyan), 0);
+        lv_obj_t* title = kit::Centered(levelup_, 30, &font_mono_20, kit::kHudCyan);
+        lv_obj_set_style_text_letter_space(title, 4, 0);
+        lv_label_set_text(title, "\u25B8 NIVEL");
+        levelup_number_ = kit::Centered(levelup_, 64, &font_mono_80, 0xFFFFFF);
+        lv_obj_t* sub = kit::Centered(levelup_, 170, &font_mono_14, kit::kHudDim);
+        lv_label_set_text(sub, "NOS CONOCEMOS MEJOR");
+        kit::Corners(levelup_);
+    }
+    char text[24];
+    snprintf(text, sizeof(text), "%d", level);
+    lv_label_set_text(levelup_number_, text);
+    levelup_ticks_ = 125;  // 5 segundos
+    lv_obj_remove_flag(levelup_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(levelup_);
+    Application::GetInstance().Schedule(
+        []() { Application::GetInstance().PlaySound(Lang::Sounds::OGG_SUCCESS); });
+}
+
+void SparkBotDisplay::AnimateLevelUp() {
+    levelup_ticks_--;
+    // Onda que se expande desde el centro una y otra vez
+    const int phase = (125 - levelup_ticks_) % 30;
+    const int size = 40 + phase * 7;
+    lv_obj_set_size(levelup_ring_, size, size);
+    lv_obj_set_pos(levelup_ring_, 120 - size / 2, 112 - size / 2);
+    lv_obj_set_style_border_opa(levelup_ring_, static_cast<lv_opa_t>(255 - phase * 8), 0);
+    const bool flash = (levelup_ticks_ / 6) % 2 == 0;
+    kit::SetColor(levelup_number_, flash ? 0xFFFFFF : kCyan);
+    if (levelup_ticks_ <= 0) {
+        lv_obj_add_flag(levelup_, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Arranque: líneas de "sistema iniciándose" hasta que el robot está listo
+// ---------------------------------------------------------------------------
+
+void SparkBotDisplay::BuildBoot() {
+    boot_ = kit::Overlay();
+    lv_obj_remove_flag(boot_, LV_OBJ_FLAG_HIDDEN);
+    kit::Corners(boot_);
+    lv_obj_t* logo = kit::Centered(boot_, 30, &font_mono_20, kCyan);
+    lv_obj_set_style_text_letter_space(logo, 3, 0);
+    lv_label_set_text(logo, "J.A.R.V.I.S.");
+    lv_obj_t* sub = kit::Centered(boot_, 56, &font_mono_14, kit::kHudDim);
+    lv_label_set_text(sub, "INICIANDO SISTEMAS");
+    static const char* kNames[kBootLines] = {"> N\u00DACLEO", "> AUDIO", "> PANTALLA", "> RED", "> SERVIDOR IA"};
+    for (int i = 0; i < kBootLines; ++i) {
+        boot_lines_[i] = kit::Text(boot_, 24, 88 + i * 20, 130, &font_mono_14, 0xB0BEC5, LV_TEXT_ALIGN_LEFT);
+        lv_label_set_text(boot_lines_[i], kNames[i]);
+        boot_status_[i] = kit::Text(boot_, 150, 88 + i * 20, 66, &font_mono_14, 0x4DFFA0, LV_TEXT_ALIGN_RIGHT);
+        lv_obj_add_flag(boot_lines_[i], LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(boot_status_[i], LV_OBJ_FLAG_HIDDEN);
+    }
+    kit::Box(boot_, 30, 200, 180, 4, 2, kit::kHudLine);
+    boot_bar_ = kit::Box(boot_, 30, 200, 4, 4, 2, kCyan);
+}
+
+// Devuelve true mientras la pantalla de arranque tapa todo
+bool SparkBotDisplay::AnimateBoot(int state_value) {
+    const auto state = static_cast<DeviceState>(state_value);
+    boot_ticks_++;
+    // Si hay que configurar el wifi o activar el robot, se quita para que veas las instrucciones
+    const bool must_hide = state == kDeviceStateWifiConfiguring || state == kDeviceStateActivating ||
+                           state == kDeviceStateFatalError || state == kDeviceStateUpgrading || boot_ticks_ > 500;
+    const bool network_up = state != kDeviceStateUnknown && state != kDeviceStateStarting;
+    const bool ready = state == kDeviceStateIdle || state == kDeviceStateListening ||
+                       state == kDeviceStateConnecting || state == kDeviceStateSpeaking;
+
+    if (boot_fade_ < 0 && !must_hide) {
+        for (int i = 0; i < kBootLines; ++i) {
+            if (boot_ticks_ < 8 * (i + 1)) break;
+            lv_obj_remove_flag(boot_lines_[i], LV_OBJ_FLAG_HIDDEN);
+            lv_obj_remove_flag(boot_status_[i], LV_OBJ_FLAG_HIDDEN);
+            bool ok = i < 3 || (i == 3 && network_up) || (i == 4 && ready);
+            if (ok) {
+                lv_label_set_text(boot_status_[i], "[ OK ]");
+                kit::SetColor(boot_status_[i], 0x4DFFA0);
+            } else {
+                static const char* kSpin[4] = {"[    ]", "[.   ]", "[..  ]", "[... ]"};
+                lv_label_set_text(boot_status_[i], kSpin[(boot_ticks_ / 4) % 4]);
+                kit::SetColor(boot_status_[i], 0xFFB300);
+            }
+        }
+        int done = 0;
+        for (int i = 0; i < kBootLines; ++i) {
+            if (boot_ticks_ >= 8 * (i + 1) && (i < 3 || (i == 3 && network_up) || (i == 4 && ready))) done++;
+        }
+        lv_obj_set_width(boot_bar_, std::max(4, 180 * done / kBootLines));
+        if (done == kBootLines && boot_ticks_ >= 60) {
+            boot_fade_ = 10;
+        }
+    }
+    if (must_hide && boot_fade_ < 0) {
+        boot_fade_ = 1;
+    }
+    if (boot_fade_ >= 0) {
+        lv_obj_set_style_opa(boot_, static_cast<lv_opa_t>(255 * boot_fade_ / 10), 0);
+        if (--boot_fade_ < 0) {
+            lv_obj_delete(boot_);
+            boot_ = nullptr;
+            return false;
+        }
+    }
+    return true;
 }
 
 void SparkBotDisplay::BuildClock() {
@@ -239,8 +389,10 @@ void SparkBotDisplay::UpdateClock(bool idle) {
         last_clock_second_ = -1;
         if (idle) {
             lv_obj_remove_flag(clock_, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_remove_flag(footer_, LV_OBJ_FLAG_HIDDEN);
         } else {
             lv_obj_add_flag(clock_, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(footer_, LV_OBJ_FLAG_HIDDEN);
         }
         if (status_label_ != nullptr) {
             lv_obj_set_style_text_opa(status_label_, idle ? LV_OPA_TRANSP : LV_OPA_COVER, 0);
@@ -353,7 +505,7 @@ void SparkBotDisplay::AnimateThinking() {
     }
     if (ticks_ % 3 == 0) {
         const uint32_t tenths = lv_tick_elaps(think_start_ms_) / 100;
-        char text[12];
+        char text[24];
         snprintf(text, sizeof(text), "%u.%u", static_cast<unsigned>(std::min<uint32_t>(tenths / 10, 99)),
                  static_cast<unsigned>(tenths % 10));
         lv_label_set_text(think_time_, text);
@@ -366,6 +518,9 @@ void SparkBotDisplay::SetChatMessage(const char* role, const char* content) {
         return;
     }
     const bool has_text = content != nullptr && content[0] != '\0';
+    if (strcmp(role, "user") == 0 && has_text) {
+        Companion::Get().AddConversation();
+    }
     DisplayLockGuard lock(this);
     if (strcmp(role, "user") == 0 && has_text) {
         // Ya ha entendido lo que has dicho: ahora piensa hasta que empiece a responder
@@ -483,6 +638,12 @@ void SparkBotDisplay::OnTimer() {
     if (emoji_box_ != nullptr && !lv_obj_has_flag(emoji_box_, LV_OBJ_FLAG_HIDDEN)) {
         lv_obj_add_flag(emoji_box_, LV_OBJ_FLAG_HIDDEN);
     }
+    if (boot_ != nullptr && AnimateBoot(static_cast<int>(Application::GetInstance().GetDeviceState()))) {
+        return;
+    }
+    if (levelup_ticks_ > 0) {
+        AnimateLevelUp();
+    }
 
     const DeviceState state = Application::GetInstance().GetDeviceState();
     const bool listening = state == kDeviceStateListening;
@@ -503,6 +664,7 @@ void SparkBotDisplay::OnTimer() {
     const bool board_ready = state != kDeviceStateUnknown && state != kDeviceStateStarting;
     if (board_ready && ticks_ % 50 == 1) {
         UpdateStatusIcons();
+        UpdateFooter();
     }
     if (think_visible_) {
         AnimateThinking();

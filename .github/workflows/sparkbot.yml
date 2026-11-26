@@ -15,6 +15,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # Las claves de IA vienen de los secretos del repositorio y nunca se guardan en el código
+      - name: Write AI keys
+        shell: bash
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          printf '#pragma once\n#define GEMINI_API_KEY "%s"\n#define GROQ_API_KEY "%s"\n' \
+            "$GEMINI_API_KEY" "$GROQ_API_KEY" > main/boards/espressif/esp-sparkbot/secrets.h
+
       - name: Build SparkBot
         shell: bash
         run: |
@@ -28,3 +38,4 @@ jobs:
           name: sparkbot-es-jarvis
           path: build/merged-binary.bin
           if-no-files-found: error
+          retention-days: 3

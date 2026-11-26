@@ -4,6 +4,7 @@
 #include "application.h"
 #include "assets/lang_config.h"
 #include "display/display.h"
+#include "companion.h"
 #include "mcp_server.h"
 #include "screen_kit.h"
 #include "settings.h"
@@ -252,7 +253,7 @@ void StudyScreens::RenderLocked() {
     lv_obj_set_style_arc_color(pomo_arc_, color, LV_PART_INDICATOR);
 
     // Los dos puntos parpadean mientras corre el tiempo
-    char time_text[8];
+    char time_text[24];
     const bool colon = paused_ || (secs % 2 == 0);
     snprintf(time_text, sizeof(time_text), colon ? "%02d:%02d" : "%02d %02d", mm, ss);
     lv_label_set_text(pomo_time_label_, time_text);
@@ -308,12 +309,14 @@ void StudyScreens::Tick() {
     bool play_success = false;
     bool play_popup = false;
     bool active = false;
+    int studied_minutes = 0;
     {
         std::lock_guard<std::mutex> guard(mutex_);
         const int64_t now = esp_timer_get_time();
         if (phase_ != Phase::kOff && !paused_ && now >= phase_end_us_) {
             if (phase_ == Phase::kStudy) {
                 completed_++;
+                studied_minutes = study_minutes_;
                 const bool long_break = completed_ % 4 == 0;
                 phase_ = Phase::kBreak;
                 phase_total_us_ = (long_break ? 15 : break_minutes_) * kMinuteUs;
@@ -327,6 +330,9 @@ void StudyScreens::Tick() {
             phase_end_us_ = now + phase_total_us_;
         }
         active = phase_ != Phase::kOff || now < exam_until_us_ + 2 * kSecondUs;
+    }
+    if (studied_minutes > 0) {
+        Companion::Get().AddStudyMinutes(studied_minutes);  // racha y experiencia
     }
     if (!active) {
         return;
@@ -440,7 +446,7 @@ bool StudyScreens::ShowNextExam(std::string& message) {
         DisplayLockGuard lock(display_);
         BuildExamUi();
         const int days = static_cast<int>(std::min<int64_t>(best, 999));
-        char days_text[8];
+        char days_text[24];
         snprintf(days_text, sizeof(days_text), "%d", days);
         lv_label_set_text(exam_days_label_, days_text);
         // Rojo si queda una semana o menos, ámbar si queda un mes, lila si hay tiempo

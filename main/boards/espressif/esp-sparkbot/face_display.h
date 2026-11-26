@@ -66,6 +66,26 @@ private:
     int last_wifi_level_ = -1;
     int last_battery_ = -2;
 
+    // Pie de reposo: nivel, racha y minutos de hoy
+    lv_obj_t* footer_ = nullptr;
+    lv_obj_t* footer_label_ = nullptr;
+    lv_obj_t* xp_bar_ = nullptr;
+
+    // Subida de nivel
+    lv_obj_t* levelup_ = nullptr;
+    lv_obj_t* levelup_ring_ = nullptr;
+    lv_obj_t* levelup_number_ = nullptr;
+    int levelup_ticks_ = 0;
+
+    // Arranque tipo "sistema iniciándose"
+    static constexpr int kBootLines = 5;
+    lv_obj_t* boot_ = nullptr;
+    lv_obj_t* boot_lines_[kBootLines] = {};
+    lv_obj_t* boot_status_[kBootLines] = {};
+    lv_obj_t* boot_bar_ = nullptr;
+    int boot_ticks_ = 0;
+    int boot_fade_ = -1;
+
     // Reloj de reposo
     lv_obj_t* clock_ = nullptr;
     lv_obj_t* clock_time_ = nullptr;
@@ -76,6 +96,12 @@ private:
     void BuildFace();
     void BuildClock();
     void BuildStatusIcons();
+    void BuildFooter();
+    void UpdateFooter();
+    void ShowLevelUp(int level);
+    void AnimateLevelUp();
+    void BuildBoot();
+    bool AnimateBoot(int state);
     void UpdateStatusIcons();
     void StyleSubtitles();
     void UpdateClock(bool idle);

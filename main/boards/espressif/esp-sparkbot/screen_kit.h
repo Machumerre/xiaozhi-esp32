@@ -57,6 +57,9 @@ inline lv_obj_t* Text(lv_obj_t* parent, int x, int y, int width, const lv_font_t
     lv_obj_set_style_text_color(label, lv_color_hex(color), 0);
     lv_obj_set_style_text_align(label, align, 0);
     lv_label_set_long_mode(label, mode);
+    if (mode == LV_LABEL_LONG_MODE_DOTS || mode == LV_LABEL_LONG_MODE_CLIP) {
+        lv_obj_set_height(label, lv_font_get_line_height(font));  // una sola línea
+    }
     lv_label_set_text(label, "");
     return label;
 }
