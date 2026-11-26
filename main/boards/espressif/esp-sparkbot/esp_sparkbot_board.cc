@@ -7,6 +7,7 @@
 #include "tool_group.h"
 #include "settings.h"
 #include "wifi_board.h"
+#include "adc_battery_monitor.h"
 #include "study_screens.h"
 #include "weather_screen.h"
 #include "alarm_screen.h"
@@ -62,6 +63,8 @@ private:
     AgendaScreen* agenda_screen_ = nullptr;
     ExpertAi* expert_ai_ = nullptr;
     NavScreen* nav_screen_ = nullptr;
+    // Batería de la cabeza: GPIO14 (ADC2 canal 3) con divisor 1:1
+    AdcBatteryMonitor* battery_monitor_ = nullptr;
 
     void InitializeI2c() {
         // Initialize I2C peripheral
@@ -316,6 +319,7 @@ public:
         InitializeCamera();
         InitializeEchoUart();
         InitializeTools();
+        battery_monitor_ = new AdcBatteryMonitor(ADC_UNIT_2, ADC_CHANNEL_3, 100000, 100000, GPIO_NUM_NC);
         // Pantallas propias: Pomodoro y cuenta atrás de exámenes
         static_cast<SparkBotDisplay*>(display_)->RegisterTools();
         study_screens_ = new StudyScreens(display_);
@@ -350,6 +354,16 @@ public:
     }
 
     virtual Camera* GetCamera() override { return camera_; }
+
+    virtual bool GetBatteryLevel(int& level, bool& charging, bool& discharging) override {
+        if (battery_monitor_ == nullptr) {
+            return false;
+        }
+        charging = battery_monitor_->IsCharging();
+        discharging = battery_monitor_->IsDischarging();
+        level = battery_monitor_->GetBatteryLevel();
+        return true;
+    }
 };
 
 DECLARE_BOARD(EspSparkBot);
