@@ -1,16 +1,24 @@
-// Piezas comunes para dibujar las pantallas propias del SparkBot.
+// Piezas comunes para dibujar las pantallas propias del SparkBot (estilo HUD, fuente de consola).
 #ifndef SCREEN_KIT_H
 #define SCREEN_KIT_H
 
 #include <lvgl.h>
 
-#include <cctype>
 #include <cstdint>
 #include <string>
 
-LV_FONT_DECLARE(BUILTIN_TEXT_FONT);
+// Fuente JetBrains Mono (licencia OFL) convertida para LVGL
+LV_FONT_DECLARE(font_mono_14);  // normal, texto pequeño
+LV_FONT_DECLARE(font_mono_20);  // negrita, texto mediano
+LV_FONT_DECLARE(font_mono_56);  // negrita, solo "0123456789:-%° "
+LV_FONT_DECLARE(font_mono_80);  // negrita, solo cifras
 
 namespace kit {
+
+constexpr uint32_t kHudCyan = 0x5FE3FF;
+constexpr uint32_t kHudDim = 0x4A7A88;
+constexpr uint32_t kHudLine = 0x1E4A56;
+constexpr uint32_t kWhite = 0xFFFFFF;
 
 inline lv_obj_t* Box(lv_obj_t* parent, int x, int y, int w, int h, int radius, uint32_t color) {
     lv_obj_t* obj = lv_obj_create(parent);
@@ -36,17 +44,47 @@ inline lv_obj_t* Group(lv_obj_t* parent, int x, int y, int w, int h) {
     return obj;
 }
 
-inline lv_obj_t* Label(lv_obj_t* parent, int y, int width, uint32_t color,
-                       lv_label_long_mode_t mode = LV_LABEL_LONG_MODE_DOTS) {
+// Etiqueta en una posición; align = LV_TEXT_ALIGN_LEFT / CENTER / RIGHT dentro de su ancho
+inline lv_obj_t* Text(lv_obj_t* parent, int x, int y, int width, const lv_font_t* font, uint32_t color,
+                      lv_text_align_t align = LV_TEXT_ALIGN_CENTER,
+                      lv_label_long_mode_t mode = LV_LABEL_LONG_MODE_DOTS) {
     lv_obj_t* label = lv_label_create(parent);
     lv_obj_set_width(label, width);
-    lv_obj_set_style_text_font(label, &BUILTIN_TEXT_FONT, 0);
+    lv_obj_set_pos(label, x, y);
+    lv_obj_set_style_text_font(label, font, 0);
     lv_obj_set_style_text_color(label, lv_color_hex(color), 0);
-    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_align(label, align, 0);
     lv_label_set_long_mode(label, mode);
-    lv_obj_align(label, LV_ALIGN_TOP_MID, 0, y);
     lv_label_set_text(label, "");
     return label;
+}
+
+// Etiqueta centrada en la pantalla de 240 px
+inline lv_obj_t* Centered(lv_obj_t* parent, int y, const lv_font_t* font, uint32_t color, int width = 224,
+                          lv_label_long_mode_t mode = LV_LABEL_LONG_MODE_DOTS) {
+    return Text(parent, (240 - width) / 2, y, width, font, color, LV_TEXT_ALIGN_CENTER, mode);
+}
+
+inline void SetColor(lv_obj_t* label, uint32_t color) {
+    lv_obj_set_style_text_color(label, lv_color_hex(color), 0);
+}
+
+// Línea horizontal fina
+inline lv_obj_t* HLine(lv_obj_t* parent, int x, int y, int w, uint32_t color = kHudLine) {
+    return Box(parent, x, y, w, 1, 0, color);
+}
+
+// Esquinas tipo visor en los bordes de la pantalla
+inline void Corners(lv_obj_t* parent, uint32_t color = kHudCyan, int inset = 4, int len = 14, int t = 2) {
+    const int far = 240 - inset;
+    Box(parent, inset, inset, len, t, 0, color);
+    Box(parent, inset, inset, t, len, 0, color);
+    Box(parent, far - len, inset, len, t, 0, color);
+    Box(parent, far - t, inset, t, len, 0, color);
+    Box(parent, inset, far - t, len, t, 0, color);
+    Box(parent, inset, far - len, t, len, 0, color);
+    Box(parent, far - len, far - t, len, t, 0, color);
+    Box(parent, far - t, far - len, t, len, 0, color);
 }
 
 // Capa negra a pantalla completa encima de todo, oculta al principio
@@ -62,55 +100,29 @@ inline lv_obj_t* Overlay() {
     return root;
 }
 
-// Dígito de 7 segmentos
-struct Digit {
-    lv_obj_t* seg[7] = {};
-};
-
-inline void MakeDigit(lv_obj_t* parent, Digit& d, int x, int y, int w, int h, int t, uint32_t off) {
-    const int vh = (h - 3 * t) / 2;
-    const int r = t / 2;
-    d.seg[0] = Box(parent, x + t, y, w - 2 * t, t, r, off);
-    d.seg[1] = Box(parent, x + w - t, y + t, t, vh, r, off);
-    d.seg[2] = Box(parent, x + w - t, y + 2 * t + vh, t, vh, r, off);
-    d.seg[3] = Box(parent, x + t, y + h - t, w - 2 * t, t, r, off);
-    d.seg[4] = Box(parent, x, y + 2 * t + vh, t, vh, r, off);
-    d.seg[5] = Box(parent, x, y + t, t, vh, r, off);
-    d.seg[6] = Box(parent, x + t, y + t + vh, w - 2 * t, t, r, off);
-}
-
-inline void SetDigit(Digit& d, int value, uint32_t on, uint32_t off) {
-    static const uint8_t kMask[10] = {0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F};
-    const uint8_t mask = (value >= 0 && value <= 9) ? kMask[value] : 0;
-    for (int i = 0; i < 7; ++i) {
-        if (d.seg[i] != nullptr) {
-            lv_obj_set_style_bg_color(d.seg[i], lv_color_hex((mask & (1 << i)) ? on : off), 0);
-        }
-    }
-}
-
-// La fuente integrada solo tiene caracteres básicos: mayúsculas sin tildes
+// Deja solo los caracteres que tiene la fuente (ASCII y Latin-1: tildes, ñ, ü, ¿, ¡, °)
+// y corta a max_chars caracteres.
 inline std::string ScreenText(const std::string& utf8, size_t max_chars) {
     std::string out;
-    for (size_t i = 0; i < utf8.size() && out.size() < max_chars; ++i) {
+    size_t count = 0;
+    for (size_t i = 0; i < utf8.size() && count < max_chars; ++i) {
         unsigned char c = static_cast<unsigned char>(utf8[i]);
-        if (c < 0x80) {
-            out.push_back(static_cast<char>(std::toupper(c)));
+        if (c >= 0x20 && c < 0x7F) {
+            out.push_back(static_cast<char>(c));
+            ++count;
             continue;
         }
-        if (c == 0xC3 && i + 1 < utf8.size()) {
-            unsigned char n = static_cast<unsigned char>(utf8[++i]);
-            char mapped = 0;
-            if ((n >= 0x80 && n <= 0x85) || (n >= 0xA0 && n <= 0xA5)) mapped = 'A';
-            else if ((n >= 0x88 && n <= 0x8B) || (n >= 0xA8 && n <= 0xAB)) mapped = 'E';
-            else if ((n >= 0x8C && n <= 0x8F) || (n >= 0xAC && n <= 0xAF)) mapped = 'I';
-            else if ((n >= 0x92 && n <= 0x96) || (n >= 0xB2 && n <= 0xB6)) mapped = 'O';
-            else if ((n >= 0x99 && n <= 0x9C) || (n >= 0xB9 && n <= 0xBC)) mapped = 'U';
-            else if (n == 0x91 || n == 0xB1) mapped = 'N';
-            else if (n == 0x87 || n == 0xA7) mapped = 'C';
-            if (mapped) out.push_back(mapped);
+        if ((c == 0xC2 || c == 0xC3) && i + 1 < utf8.size()) {
+            unsigned char n = static_cast<unsigned char>(utf8[i + 1]);
+            if ((n & 0xC0) == 0x80 && !(c == 0xC2 && n < 0xA0)) {
+                out.push_back(static_cast<char>(c));
+                out.push_back(static_cast<char>(n));
+                ++count;
+            }
+            ++i;
             continue;
         }
+        // Otros caracteres (emojis, otros alfabetos): se saltan
         while (i + 1 < utf8.size() && (static_cast<unsigned char>(utf8[i + 1]) & 0xC0) == 0x80) {
             ++i;
         }

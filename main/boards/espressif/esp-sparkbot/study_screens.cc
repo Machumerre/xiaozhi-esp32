@@ -5,6 +5,7 @@
 #include "assets/lang_config.h"
 #include "display/display.h"
 #include "mcp_server.h"
+#include "screen_kit.h"
 #include "settings.h"
 
 #include <esp_log.h>
@@ -16,17 +17,12 @@
 
 #define TAG "StudyScreens"
 
-LV_FONT_DECLARE(BUILTIN_TEXT_FONT);
-
 namespace {
 
 constexpr int64_t kSecondUs = 1000000;
 constexpr int64_t kMinuteUs = 60 * kSecondUs;
 constexpr int64_t kExamScreenUs = 15 * kSecondUs;
 constexpr size_t kMaxExams = 12;
-
-// Segmentos a..g (bit 0 = a ... bit 6 = g)
-constexpr uint8_t kDigitMask[10] = {0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F};
 
 lv_color_t ColorStudy() { return lv_color_hex(0x00E676); }
 lv_color_t ColorBreak() { return lv_color_hex(0x2F8CFF); }
@@ -36,8 +32,8 @@ lv_color_t ColorOff() { return lv_color_hex(0x16201B); }
 lv_color_t ColorText() { return lv_color_hex(0xE6EEF0); }
 lv_color_t ColorBlack() { return lv_color_hex(0x000000); }
 
-const char* kMonths[12] = {"ENE", "FEB", "MAR", "ABR", "MAY", "JUN",
-                           "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"};
+const char* kMonths[12] = {"ene", "feb", "mar", "abr", "may", "jun",
+                           "jul", "ago", "sep", "oct", "nov", "dic"};
 
 lv_obj_t* CreateBox(lv_obj_t* parent, int x, int y, int w, int h, int radius, lv_color_t color) {
     lv_obj_t* obj = lv_obj_create(parent);
@@ -52,10 +48,11 @@ lv_obj_t* CreateBox(lv_obj_t* parent, int x, int y, int w, int h, int radius, lv
     return obj;
 }
 
-lv_obj_t* CreateLabel(lv_obj_t* parent, int y, int width, lv_color_t color) {
+lv_obj_t* CreateLabel(lv_obj_t* parent, int y, int width, lv_color_t color,
+                      const lv_font_t* font = &font_mono_14) {
     lv_obj_t* label = lv_label_create(parent);
     lv_obj_set_width(label, width);
-    lv_obj_set_style_text_font(label, &BUILTIN_TEXT_FONT, 0);
+    lv_obj_set_style_text_font(label, font, 0);
     lv_obj_set_style_text_color(label, color, 0);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_long_mode(label, LV_LABEL_LONG_MODE_DOTS);
@@ -100,39 +97,9 @@ StudyScreens::StudyScreens(Display* display) : display_(display) {}
 // Utilidades de texto y fechas
 // ---------------------------------------------------------------------------
 
-// La fuente integrada solo tiene caracteres básicos: pasamos a mayúsculas sin tildes.
+// Solo los caracteres que tiene la fuente de consola (con tildes y ñ)
 std::string StudyScreens::ToScreenText(const std::string& utf8, size_t max_chars) {
-    std::string out;
-    for (size_t i = 0; i < utf8.size() && out.size() < max_chars; ++i) {
-        unsigned char c = static_cast<unsigned char>(utf8[i]);
-        if (c < 0x80) {
-            out.push_back(static_cast<char>(std::toupper(c)));
-            continue;
-        }
-        if (c == 0xC3 && i + 1 < utf8.size()) {
-            unsigned char n = static_cast<unsigned char>(utf8[++i]);
-            char mapped = 0;
-            switch (n) {
-                case 0xA0: case 0xA1: case 0xA2: case 0xA4: case 0x80: case 0x81: case 0x82: case 0x84: mapped = 'A'; break;
-                case 0xA8: case 0xA9: case 0xAA: case 0xAB: case 0x88: case 0x89: case 0x8A: case 0x8B: mapped = 'E'; break;
-                case 0xAC: case 0xAD: case 0xAE: case 0xAF: case 0x8C: case 0x8D: case 0x8E: case 0x8F: mapped = 'I'; break;
-                case 0xB2: case 0xB3: case 0xB4: case 0xB6: case 0x92: case 0x93: case 0x94: case 0x96: mapped = 'O'; break;
-                case 0xB9: case 0xBA: case 0xBB: case 0xBC: case 0x99: case 0x9A: case 0x9B: case 0x9C: mapped = 'U'; break;
-                case 0xB1: case 0x91: mapped = 'N'; break;
-                case 0xA7: case 0x87: mapped = 'C'; break;
-                default: break;
-            }
-            if (mapped) {
-                out.push_back(mapped);
-            }
-            continue;
-        }
-        // Otros caracteres multibyte: los saltamos
-        while (i + 1 < utf8.size() && (static_cast<unsigned char>(utf8[i + 1]) & 0xC0) == 0x80) {
-            ++i;
-        }
-    }
-    return out;
+    return kit::ScreenText(utf8, max_chars);
 }
 
 int64_t StudyScreens::DaysFromCivil(int y, int m, int d) {
@@ -204,27 +171,6 @@ void StudyScreens::SaveExams(const std::vector<Exam>& exams) {
 // Construcción de la interfaz (siempre con la pantalla bloqueada)
 // ---------------------------------------------------------------------------
 
-void StudyScreens::CreateSevenSeg(lv_obj_t* parent, SevenSeg& digit, int x, int y, int w, int h, int t) {
-    const int vh = (h - 3 * t) / 2;
-    const int r = t / 2;
-    digit.seg[0] = CreateBox(parent, x + t, y, w - 2 * t, t, r, ColorOff());               // a
-    digit.seg[1] = CreateBox(parent, x + w - t, y + t, t, vh, r, ColorOff());              // b
-    digit.seg[2] = CreateBox(parent, x + w - t, y + 2 * t + vh, t, vh, r, ColorOff());     // c
-    digit.seg[3] = CreateBox(parent, x + t, y + h - t, w - 2 * t, t, r, ColorOff());       // d
-    digit.seg[4] = CreateBox(parent, x, y + 2 * t + vh, t, vh, r, ColorOff());             // e
-    digit.seg[5] = CreateBox(parent, x, y + t, t, vh, r, ColorOff());                      // f
-    digit.seg[6] = CreateBox(parent, x + t, y + t + vh, w - 2 * t, t, r, ColorOff());      // g
-}
-
-void StudyScreens::SetSevenSeg(SevenSeg& digit, int value, lv_color_t on, lv_color_t off) {
-    uint8_t mask = (value >= 0 && value <= 9) ? kDigitMask[value] : 0;
-    for (int i = 0; i < 7; ++i) {
-        if (digit.seg[i] != nullptr) {
-            lv_obj_set_style_bg_color(digit.seg[i], (mask & (1 << i)) ? on : off, 0);
-        }
-    }
-}
-
 void StudyScreens::BuildPomodoroUi() {
     if (pomo_root_ != nullptr) {
         return;
@@ -240,24 +186,19 @@ void StudyScreens::BuildPomodoroUi() {
     lv_arc_set_range(pomo_arc_, 0, 1000);
     lv_arc_set_value(pomo_arc_, 1000);
     lv_obj_remove_flag(pomo_arc_, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_arc_width(pomo_arc_, 10, LV_PART_MAIN);
+    lv_obj_set_style_arc_width(pomo_arc_, 8, LV_PART_MAIN);
     lv_obj_set_style_arc_color(pomo_arc_, ColorOff(), LV_PART_MAIN);
-    lv_obj_set_style_arc_width(pomo_arc_, 10, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_width(pomo_arc_, 8, LV_PART_INDICATOR);
     lv_obj_set_style_arc_color(pomo_arc_, ColorStudy(), LV_PART_INDICATOR);
     lv_obj_set_style_arc_rounded(pomo_arc_, true, LV_PART_INDICATOR);
 
-    pomo_phase_label_ = CreateLabel(pomo_root_, 46, 170, ColorStudy());
+    pomo_phase_label_ = CreateLabel(pomo_root_, 50, 170, ColorStudy());
+    lv_obj_set_style_text_letter_space(pomo_phase_label_, 1, 0);
 
-    // MM:SS con dígitos de 7 segmentos
-    const int y0 = 87;
-    const int xs[4] = {43, 79, 131, 167};
-    for (int i = 0; i < 4; ++i) {
-        CreateSevenSeg(pomo_root_, pomo_digits_[i], xs[i], y0, 30, 54, 6);
-    }
-    pomo_colon_[0] = CreateBox(pomo_root_, 117, y0 + 14, 6, 6, 3, ColorStudy());
-    pomo_colon_[1] = CreateBox(pomo_root_, 117, y0 + 34, 6, 6, 3, ColorStudy());
+    pomo_time_label_ = CreateLabel(pomo_root_, 74, 200, ColorText(), &font_mono_56);
+    lv_obj_set_style_text_letter_space(pomo_time_label_, -2, 0);
 
-    pomo_subject_label_ = CreateLabel(pomo_root_, 150, 150, ColorText());
+    pomo_subject_label_ = CreateLabel(pomo_root_, 146, 160, lv_color_hex(0xB0BEC5), &font_mono_20);
 
     for (int i = 0; i < 4; ++i) {
         pomo_dots_[i] = CreateBox(pomo_root_, 88 + i * 18, 182, 10, 10, LV_RADIUS_CIRCLE, ColorOff());
@@ -271,13 +212,16 @@ void StudyScreens::BuildExamUi() {
         return;
     }
     exam_root_ = CreateRoot();
-    exam_top_label_ = CreateLabel(exam_root_, 36, 200, ColorExam());
-    for (int i = 0; i < 3; ++i) {
-        CreateSevenSeg(exam_root_, exam_digits_[i], 0, 66, 36, 64, 7);
-    }
-    exam_unit_label_ = CreateLabel(exam_root_, 140, 200, ColorExam());
-    exam_subject_label_ = CreateLabel(exam_root_, 168, 210, ColorText());
-    exam_date_label_ = CreateLabel(exam_root_, 196, 200, ColorExam());
+    kit::Corners(exam_root_);
+    exam_top_label_ = CreateLabel(exam_root_, 22, 210, lv_color_hex(kit::kHudDim));
+    lv_obj_set_style_text_letter_space(exam_top_label_, 1, 0);
+    exam_subject_label_ = CreateLabel(exam_root_, 44, 216, ColorText(), &font_mono_20);
+    lv_label_set_long_mode(exam_subject_label_, LV_LABEL_LONG_MODE_SCROLL_CIRCULAR);
+    exam_days_label_ = CreateLabel(exam_root_, 72, 220, ColorExam(), &font_mono_80);
+    exam_unit_label_ = CreateLabel(exam_root_, 164, 200, ColorExam());
+    lv_obj_set_style_text_letter_space(exam_unit_label_, 2, 0);
+    kit::HLine(exam_root_, 40, 190, 160);
+    exam_date_label_ = CreateLabel(exam_root_, 200, 200, lv_color_hex(kit::kHudDim));
 }
 
 // ---------------------------------------------------------------------------
@@ -307,25 +251,23 @@ void StudyScreens::RenderLocked() {
     lv_arc_set_value(pomo_arc_, value);
     lv_obj_set_style_arc_color(pomo_arc_, color, LV_PART_INDICATOR);
 
-    SetSevenSeg(pomo_digits_[0], mm / 10, color, ColorOff());
-    SetSevenSeg(pomo_digits_[1], mm % 10, color, ColorOff());
-    SetSevenSeg(pomo_digits_[2], ss / 10, color, ColorOff());
-    SetSevenSeg(pomo_digits_[3], ss % 10, color, ColorOff());
     // Los dos puntos parpadean mientras corre el tiempo
-    lv_color_t colon = (paused_ || (secs % 2 == 0)) ? color : ColorOff();
-    lv_obj_set_style_bg_color(pomo_colon_[0], colon, 0);
-    lv_obj_set_style_bg_color(pomo_colon_[1], colon, 0);
+    char time_text[8];
+    const bool colon = paused_ || (secs % 2 == 0);
+    snprintf(time_text, sizeof(time_text), colon ? "%02d:%02d" : "%02d %02d", mm, ss);
+    lv_label_set_text(pomo_time_label_, time_text);
+    lv_obj_set_style_text_color(pomo_time_label_, paused_ ? ColorPause() : ColorText(), 0);
 
-    const char* phase_text = "ESTUDIO";
+    const char* phase_text = "\u25CF ESTUDIO";
     if (paused_) {
-        phase_text = "PAUSA";
+        phase_text = "\u25CF PAUSA";
     } else if (phase_ == Phase::kBreak) {
-        phase_text = (completed_ > 0 && completed_ % 4 == 0) ? "DESCANSO LARGO" : "DESCANSO";
+        phase_text = (completed_ > 0 && completed_ % 4 == 0) ? "\u25CF DESCANSO LARGO" : "\u25CF DESCANSO";
     }
     lv_label_set_text(pomo_phase_label_, phase_text);
     lv_obj_set_style_text_color(pomo_phase_label_, color, 0);
 
-    std::string subject_line = phase_ == Phase::kStudy ? subject_ : "LEVANTATE Y ESTIRA";
+    std::string subject_line = phase_ == Phase::kStudy ? subject_ : "Levántate y estira";
     lv_label_set_text(pomo_subject_label_, subject_line.c_str());
 
     int filled = completed_ % 4;
@@ -498,42 +440,15 @@ bool StudyScreens::ShowNextExam(std::string& message) {
         DisplayLockGuard lock(display_);
         BuildExamUi();
         const int days = static_cast<int>(std::min<int64_t>(best, 999));
-        const int count = days >= 100 ? 3 : (days >= 10 ? 2 : 1);
-        int values[3] = {days / 100, (days / 10) % 10, days % 10};
-        // Centramos según el número de cifras
-        const int digit_step = 44;
-        const int total = count * 36 + (count - 1) * 8;
-        int x = (240 - total) / 2;
-        for (int i = 0; i < 3; ++i) {
-            bool used = i >= 3 - count;
-            for (int s = 0; s < 7; ++s) {
-                lv_obj_t* seg = exam_digits_[i].seg[s];
-                if (seg == nullptr) {
-                    continue;
-                }
-                // Reposicionamos cada dígito usado; los no usados se ocultan
-                if (used) {
-                    lv_obj_remove_flag(seg, LV_OBJ_FLAG_HIDDEN);
-                } else {
-                    lv_obj_add_flag(seg, LV_OBJ_FLAG_HIDDEN);
-                }
-            }
-            if (used) {
-                int idx = i - (3 - count);
-                int dx = x + idx * digit_step;
-                // Recolocamos los 7 segmentos respecto al origen del dígito
-                const int w = 36, h = 64, t = 7, vh = (h - 3 * t) / 2, y = 66;
-                const int pos[7][2] = {{dx + t, y}, {dx + w - t, y + t}, {dx + w - t, y + 2 * t + vh},
-                                       {dx + t, y + h - t}, {dx, y + 2 * t + vh}, {dx, y + t},
-                                       {dx + t, y + t + vh}};
-                for (int s = 0; s < 7; ++s) {
-                    lv_obj_set_pos(exam_digits_[i].seg[s], pos[s][0], pos[s][1]);
-                }
-                SetSevenSeg(exam_digits_[i], values[i], ColorExam(), lv_color_hex(0x1C1530));
-            }
-        }
-        lv_label_set_text(exam_top_label_, days == 0 ? "EXAMEN" : (days == 1 ? "FALTA" : "FALTAN"));
-        lv_label_set_text(exam_unit_label_, days == 0 ? "ES HOY" : (days == 1 ? "DIA" : "DIAS"));
+        char days_text[8];
+        snprintf(days_text, sizeof(days_text), "%d", days);
+        lv_label_set_text(exam_days_label_, days_text);
+        // Rojo si queda una semana o menos, ámbar si queda un mes, lila si hay tiempo
+        lv_color_t urgency = lv_color_hex(days <= 7 ? 0xFF6E6E : (days <= 30 ? 0xFFB74D : 0xC3A6FF));
+        lv_obj_set_style_text_color(exam_days_label_, urgency, 0);
+        lv_obj_set_style_text_color(exam_unit_label_, urgency, 0);
+        lv_label_set_text(exam_top_label_, "\u25B8 PR\u00D3XIMO EXAMEN");
+        lv_label_set_text(exam_unit_label_, days == 0 ? "\u00A1ES HOY!" : (days == 1 ? "D\u00CDA" : "D\u00CDAS"));
         std::string subject = ToScreenText(next->subject, 22);
         lv_label_set_text(exam_subject_label_, subject.c_str());
         char date[24];

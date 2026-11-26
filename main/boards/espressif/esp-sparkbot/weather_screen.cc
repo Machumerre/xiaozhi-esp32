@@ -31,7 +31,6 @@ constexpr uint32_t kCloudDark = 0x607D8B;
 constexpr uint32_t kRain = 0x4FC3F7;
 constexpr uint32_t kSnow = 0xFFFFFF;
 constexpr uint32_t kMoon = 0xFFF3C4;
-constexpr uint32_t kOffSeg = 0x101820;
 
 struct JsonDeleter {
     void operator()(cJSON* json) const { cJSON_Delete(json); }
@@ -55,8 +54,8 @@ int64_t DaysFromCivil(int y, int m, int d) {
 }
 
 const char* DayName(const char* iso_date, bool spoken) {
-    static const char* kScreen[7] = {"DOMINGO", "LUNES", "MARTES", "MIERCOLES",
-                                     "JUEVES", "VIERNES", "SABADO"};
+    static const char* kScreen[7] = {"DOMINGO", "LUNES", "MARTES", "MIÉRCOLES",
+                                     "JUEVES", "VIERNES", "SÁBADO"};
     static const char* kSpoken[7] = {"domingo", "lunes", "martes", "miércoles",
                                      "jueves", "viernes", "sábado"};
     int y = 0, m = 0, d = 0;
@@ -266,18 +265,18 @@ std::expected<WeatherScreen::Report, std::string> WeatherScreen::Fetch(const Pla
 // --- Textos -------------------------------------------------------------------------
 
 const char* WeatherScreen::Describe(int code) {
-    if (code == 0) return "DESPEJADO";
-    if (code <= 2) return "POCO NUBOSO";
-    if (code == 3) return "CUBIERTO";
-    if (code == 45 || code == 48) return "NIEBLA";
-    if (code >= 51 && code <= 57) return "LLOVIZNA";
-    if (code >= 61 && code <= 64) return "LLUVIA";
-    if (code >= 65 && code <= 67) return "LLUVIA FUERTE";
-    if (code >= 71 && code <= 77) return "NIEVE";
-    if (code >= 80 && code <= 82) return "CHUBASCOS";
-    if (code == 85 || code == 86) return "CHUBASCOS DE NIEVE";
-    if (code >= 95) return "TORMENTA";
-    return "NUBOSO";
+    if (code == 0) return "Despejado";
+    if (code <= 2) return "Poco nuboso";
+    if (code == 3) return "Cubierto";
+    if (code == 45 || code == 48) return "Niebla";
+    if (code >= 51 && code <= 57) return "Llovizna";
+    if (code >= 61 && code <= 64) return "Lluvia";
+    if (code >= 65 && code <= 67) return "Lluvia fuerte";
+    if (code >= 71 && code <= 77) return "Nieve";
+    if (code >= 80 && code <= 82) return "Chubascos";
+    if (code == 85 || code == 86) return "Chubascos de nieve";
+    if (code >= 95) return "Tormenta";
+    return "Nuboso";
 }
 
 const char* WeatherScreen::DescribeSpoken(int code) {
@@ -302,18 +301,28 @@ void WeatherScreen::Build() {
         return;
     }
     root_ = kit::Overlay();
-    place_label_ = kit::Label(root_, 8, 224, 0x8FE6F5, LV_LABEL_LONG_MODE_SCROLL_CIRCULAR);
-    icon_box_ = kit::Group(root_, 6, 36, 112, 108);
-    minus_ = kit::Box(root_, 112, 80, 12, 5, 2, 0xFFFFFF);
-    for (int i = 0; i < 2; ++i) {
-        kit::MakeDigit(root_, digits_[i], 130 + i * 32, 60, 26, 46, 5, kOffSeg);
+    kit::Corners(root_);
+    // Barra superior: lugar a la izquierda, cuándo a la derecha
+    place_label_ = kit::Text(root_, 18, 8, 136, &font_mono_14, kit::kHudCyan, LV_TEXT_ALIGN_LEFT,
+                             LV_LABEL_LONG_MODE_SCROLL_CIRCULAR);
+    when_label_ = kit::Text(root_, 150, 8, 72, &font_mono_14, kit::kHudDim, LV_TEXT_ALIGN_RIGHT);
+    kit::HLine(root_, 18, 30, 204);
+
+    icon_box_ = kit::Group(root_, 8, 32, 112, 108);
+    temp_label_ = kit::Text(root_, 112, 52, 128, &font_mono_56, kit::kWhite, LV_TEXT_ALIGN_CENTER,
+                            LV_LABEL_LONG_MODE_CLIP);
+    lv_obj_set_style_text_letter_space(temp_label_, -2, 0);
+
+    desc_label_ = kit::Centered(root_, 142, &font_mono_20, kit::kWhite, 224,
+                                LV_LABEL_LONG_MODE_SCROLL_CIRCULAR);
+    kit::HLine(root_, 18, 172, 204);
+
+    static const char* kTitles[4] = {"MÍN", "MÁX", "KM/H", "LLUVIA"};
+    for (int i = 0; i < 4; ++i) {
+        lv_obj_t* title = kit::Text(root_, i * 60, 178, 60, &font_mono_14, kit::kHudDim);
+        lv_label_set_text(title, kTitles[i]);
+        values_[i] = kit::Text(root_, i * 60, 196, 60, &font_mono_20, kit::kWhite);
     }
-    degree_ = kit::Box(root_, 194, 58, 12, 12, LV_RADIUS_CIRCLE, 0x000000);
-    lv_obj_set_style_border_width(degree_, 3, 0);
-    lv_obj_set_style_border_color(degree_, lv_color_hex(0xFFFFFF), 0);
-    desc_label_ = kit::Label(root_, 150, 224, 0xFFFFFF);
-    minmax_label_ = kit::Label(root_, 178, 224, 0xB0BEC5);
-    extra_label_ = kit::Label(root_, 204, 224, 0xFFD27A, LV_LABEL_LONG_MODE_SCROLL_CIRCULAR);
     timer_ = lv_timer_create(&WeatherScreen::TimerCallback, 500, this);
 }
 
@@ -358,14 +367,14 @@ void WeatherScreen::BuildIcon(int code, bool is_day) {
     // Lluvia, nieve y tormenta: nube arriba y cosas cayendo debajo
     const uint32_t cloud_color = storm ? kCloudDark : (rain ? kCloudGray : kCloudWhite);
     if (drizzle) {
-        Drops(p, 3, 30, 22, 60, 104, 900, kRain, 4, 9);
+        Drops(p, 3, 30, 22, 60, 96, 900, kRain, 4, 9);
     } else if (rain) {
         const bool heavy = code == 65 || code == 67 || code == 82;
-        Drops(p, 5, 20, 16, 58, 106, heavy ? 500 : 750, kRain, 4, 12);
+        Drops(p, 5, 20, 16, 58, 96, heavy ? 500 : 750, kRain, 4, 12);
     } else if (snow) {
-        Drops(p, 5, 20, 16, 58, 106, 1700, kSnow, 7, 7);
+        Drops(p, 5, 20, 16, 58, 96, 1700, kSnow, 7, 7);
     } else if (storm) {
-        Drops(p, 4, 16, 22, 58, 106, 600, kRain, 4, 12);
+        Drops(p, 4, 16, 22, 58, 96, 600, kRain, 4, 12);
         Bolt(p, 44, 58);
     }
     Cloud(p, 14, 8, 115, cloud_color, 0);
@@ -376,34 +385,33 @@ void WeatherScreen::Show(const Report& report) {
     Build();
     BuildIcon(report.code, report.is_day);
 
-    std::string place = kit::ScreenText(report.place, 30);
-    if (!report.day_name.empty()) {
-        place += " - ";
-        place += DayName(report.day_name.c_str(), false);
-    }
+    std::string place = "\u25B8 " + kit::ScreenText(report.place, 40);
     lv_label_set_text(place_label_, place.c_str());
+    lv_label_set_text(when_label_, report.day_name.empty() ? "AHORA" : DayName(report.day_name.c_str(), false));
     lv_label_set_text(desc_label_, Describe(report.code));
 
-    char text[64];
-    snprintf(text, sizeof(text), "MIN %d   MAX %d", report.temp_min, report.temp_max);
-    lv_label_set_text(minmax_label_, text);
-    snprintf(text, sizeof(text), "VIENTO %d KM/H   LLUVIA %d%%", report.wind, report.rain_probability);
-    lv_label_set_text(extra_label_, text);
-
     // Temperatura grande con color según el frío o el calor
-    const int t = report.temperature;
-    uint32_t color = t <= 0 ? 0x7FD6FF : (t <= 15 ? 0xE6F7FF : (t <= 25 ? 0xFFD27A : 0xFF8A50));
-    const int value = std::min(99, std::abs(t));
-    kit::SetDigit(digits_[0], value >= 10 ? value / 10 : -1, color, value >= 10 ? kOffSeg : 0x000000);
-    kit::SetDigit(digits_[1], value % 10, color, kOffSeg);
-    if (t < 0) {
-        lv_obj_remove_flag(minus_, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_x(minus_, value >= 10 ? 112 : 144);
-    } else {
-        lv_obj_add_flag(minus_, LV_OBJ_FLAG_HIDDEN);
-    }
-    lv_obj_set_style_bg_color(minus_, lv_color_hex(color), 0);
-    lv_obj_set_style_border_color(degree_, lv_color_hex(color), 0);
+    auto temp_color = [](int t) -> uint32_t {
+        return t <= 0 ? 0x7FD6FF : (t <= 15 ? 0xE6F7FF : (t <= 25 ? 0xFFD27A : 0xFF8A50));
+    };
+    char text[16];
+    const int shown = std::max(-99, std::min(99, report.temperature));
+    snprintf(text, sizeof(text), shown <= -10 ? "%d" : "%d\u00B0", shown);
+    lv_label_set_text(temp_label_, text);
+    kit::SetColor(temp_label_, temp_color(report.temperature));
+
+    snprintf(text, sizeof(text), "%d\u00B0", report.temp_min);
+    lv_label_set_text(values_[0], text);
+    kit::SetColor(values_[0], 0x7FD6FF);
+    snprintf(text, sizeof(text), "%d\u00B0", report.temp_max);
+    lv_label_set_text(values_[1], text);
+    kit::SetColor(values_[1], 0xFF8A50);
+    snprintf(text, sizeof(text), "%d", report.wind);
+    lv_label_set_text(values_[2], text);
+    kit::SetColor(values_[2], report.wind >= 50 ? 0xFF6E6E : 0xE6F7FF);
+    snprintf(text, sizeof(text), "%d%%", report.rain_probability);
+    lv_label_set_text(values_[3], text);
+    kit::SetColor(values_[3], 0x4FC3F7);
 
     visible_until_ = lv_tick_get() + kShowMs;
     lv_obj_remove_flag(root_, LV_OBJ_FLAG_HIDDEN);

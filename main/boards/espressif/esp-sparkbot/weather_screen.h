@@ -40,13 +40,11 @@ private:
     Display* display_;
     lv_obj_t* root_ = nullptr;
     lv_obj_t* place_label_ = nullptr;
+    lv_obj_t* when_label_ = nullptr;
+    lv_obj_t* temp_label_ = nullptr;
     lv_obj_t* desc_label_ = nullptr;
-    lv_obj_t* minmax_label_ = nullptr;
-    lv_obj_t* extra_label_ = nullptr;
     lv_obj_t* icon_box_ = nullptr;
-    lv_obj_t* minus_ = nullptr;
-    lv_obj_t* degree_ = nullptr;
-    kit::Digit digits_[2];
+    lv_obj_t* values_[4] = {};   // mínima, máxima, viento, lluvia
     lv_timer_t* timer_ = nullptr;
     uint32_t visible_until_ = 0;
 
