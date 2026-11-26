@@ -7,6 +7,7 @@
 #include "settings.h"
 #include "wifi_board.h"
 #include "study_screens.h"
+#include "face_display.h"
 
 #include <driver/i2c_master.h>
 #include <driver/spi_common.h>
@@ -119,7 +120,14 @@ private:
         esp_lcd_panel_init(panel);
         esp_lcd_panel_invert_color(panel, true);
         esp_lcd_panel_disp_on_off(panel, true);
-        display_ = new SpiLcdDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
+        // Fondo negro por defecto (tema oscuro) para que luzcan los ojos
+        {
+            Settings display_settings("display", true);
+            if (display_settings.GetString("theme", "").empty()) {
+                display_settings.SetString("theme", "dark");
+            }
+        }
+        display_ = new SparkBotDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
                                      DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
                                      DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
     }
