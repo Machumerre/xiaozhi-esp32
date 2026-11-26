@@ -1,0 +1,30 @@
+name: SparkBot ES Jarvis
+
+on:
+  push:
+    branches:
+      - ci/sparkbot-es
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: espressif/idf:release-v6.1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Build SparkBot
+        shell: bash
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          source "$IDF_PATH/export.sh"
+          python scripts/build.py esp-sparkbot --language es-ES --wake-word wn9_jarvis_tts
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v7
+        with:
+          name: sparkbot-es-jarvis
+          path: build/merged-binary.bin
+          if-no-files-found: error
