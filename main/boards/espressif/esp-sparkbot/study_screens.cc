@@ -6,6 +6,7 @@
 #include "display/display.h"
 #include "companion.h"
 #include "mcp_server.h"
+#include "tool_group.h"
 #include "screen_kit.h"
 #include "settings.h"
 
@@ -483,9 +484,10 @@ bool StudyScreens::ShowNextExam(std::string& message) {
 // ---------------------------------------------------------------------------
 
 void StudyScreens::RegisterTools() {
-    auto& mcp = McpServer::GetInstance();
+    ToolGroup pomodoro("self.pomodoro", "Temporizador Pomodoro de estudio en la pantalla del robot.");
+    ToolGroup exams("self.exams", "Exámenes del usuario con cuenta atrás en pantalla.");
 
-    mcp.AddTool("self.pomodoro.start",
+    pomodoro.AddTool("self.pomodoro.start",
                 "Inicia un Pomodoro en la pantalla del robot (anillo con cuenta atrás). Úsalo cuando el "
                 "usuario quiera empezar a estudiar o pida un temporizador de estudio. Start a study "
                 "Pomodoro timer on the robot screen.",
@@ -505,7 +507,7 @@ void StudyScreens::RegisterTools() {
                     return std::string(buf);
                 });
 
-    mcp.AddTool("self.pomodoro.stop",
+    pomodoro.AddTool("self.pomodoro.stop",
                 "Termina y quita el Pomodoro de la pantalla. Stop the Pomodoro timer.",
                 PropertyList(),
                 [this](const PropertyList&) -> ToolResult {
@@ -513,7 +515,7 @@ void StudyScreens::RegisterTools() {
                     return std::string("Pomodoro terminado.");
                 });
 
-    mcp.AddTool("self.pomodoro.pause_resume",
+    pomodoro.AddTool("self.pomodoro.pause_resume",
                 "Pausa el Pomodoro, o lo reanuda si ya estaba en pausa. Pause or resume the Pomodoro.",
                 PropertyList(),
                 [this](const PropertyList&) -> ToolResult {
@@ -523,12 +525,12 @@ void StudyScreens::RegisterTools() {
                     return PomodoroStatus();
                 });
 
-    mcp.AddTool("self.pomodoro.status",
+    pomodoro.AddTool("self.pomodoro.status",
                 "Dice cuánto queda del Pomodoro actual y cuántas rondas lleva. Get Pomodoro status.",
                 PropertyList(),
                 [this](const PropertyList&) -> ToolResult { return PomodoroStatus(); });
 
-    mcp.AddTool("self.exams.add",
+    exams.AddTool("self.exams.add",
                 "Guarda un examen para la cuenta atrás. La fecha debe ir en formato AAAA-MM-DD (convierte "
                 "tú fechas como 'el 9 de diciembre' usando la fecha actual). Save an exam date.",
                 PropertyList({
@@ -558,7 +560,7 @@ void StudyScreens::RegisterTools() {
                     return std::string("Examen guardado. ") + message;
                 });
 
-    mcp.AddTool("self.exams.list",
+    exams.AddTool("self.exams.list",
                 "Lista los exámenes guardados con los días que faltan. List saved exams.",
                 PropertyList(),
                 [this](const PropertyList&) -> ToolResult {
@@ -587,7 +589,7 @@ void StudyScreens::RegisterTools() {
                     return out.empty() ? std::string("No hay exámenes próximos.") : out;
                 });
 
-    mcp.AddTool("self.exams.remove",
+    exams.AddTool("self.exams.remove",
                 "Borra un examen guardado por el nombre de la asignatura. Remove a saved exam.",
                 PropertyList({Property("subject", kPropertyTypeString)}),
                 [this](const PropertyList& p) -> ToolResult {
@@ -604,7 +606,7 @@ void StudyScreens::RegisterTools() {
                     return std::string("Examen borrado.");
                 });
 
-    mcp.AddTool("self.exams.show_next",
+    exams.AddTool("self.exams.show_next",
                 "Muestra en la pantalla la cuenta atrás del próximo examen durante unos segundos. "
                 "Show the next exam countdown on screen.",
                 PropertyList(),

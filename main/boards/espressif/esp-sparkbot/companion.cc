@@ -2,6 +2,7 @@
 #include "companion.h"
 
 #include "mcp_server.h"
+#include "tool_group.h"
 #include "settings.h"
 
 #include <esp_log.h>
@@ -282,7 +283,7 @@ std::string Companion::StatsLocked() {
 }
 
 void Companion::RegisterTools() {
-    auto& mcp = McpServer::GetInstance();
+    ToolGroup mcp("self.memory", "Memoria del robot sobre el usuario, nivel de amistad y estadísticas de estudio. Usa la acción recall al empezar cada conversación.");
 
     mcp.AddTool(
         "self.memory.recall",

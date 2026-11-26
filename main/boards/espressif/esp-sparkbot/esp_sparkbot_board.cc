@@ -4,6 +4,7 @@
 #include "config.h"
 #include "display/lcd_display.h"
 #include "mcp_server.h"
+#include "tool_group.h"
 #include "settings.h"
 #include "wifi_board.h"
 #include "study_screens.h"
@@ -230,7 +231,8 @@ private:
     }
 
     void InitializeTools() {
-        auto& mcp_server = McpServer::GetInstance();
+        // Agrupadas en una sola herramienta para no pasar el límite del servidor
+        ToolGroup mcp_server("self.chassis", "Base con orugas del robot (moverse, bailar, luces; solo funciona si la base está conectada) y cámara.");
         // 定义设备的属性
         mcp_server.AddTool("self.chassis.get_light_mode", "获取灯光效果编号", PropertyList(),
                            [this](const PropertyList& properties) -> ReturnValue {

@@ -8,6 +8,7 @@
 #include "application.h"
 #include "display/display.h"
 #include "mcp_server.h"
+#include "tool_group.h"
 #include "screen_kit.h"
 
 #include <esp_log.h>
@@ -400,7 +401,7 @@ void NavScreen::HideCallback(lv_timer_t* timer) {
 // ---------------------------------------------------------------------------
 
 void NavScreen::RegisterTools() {
-    auto& mcp = McpServer::GetInstance();
+    ToolGroup mcp("self.nav", "Modo navegador para el coche (indicaciones de Google Maps reenviadas desde el móvil).");
 
     mcp.AddTool(
         "self.nav.info",

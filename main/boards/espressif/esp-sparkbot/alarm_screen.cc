@@ -6,6 +6,7 @@
 #include "display/display.h"
 #include "companion.h"
 #include "mcp_server.h"
+#include "tool_group.h"
 #include "screen_kit.h"
 #include "settings.h"
 
@@ -389,7 +390,7 @@ void AlarmScreen::UpdateTime() {
 // ---------------------------------------------------------------------------
 
 void AlarmScreen::RegisterTools() {
-    auto& mcp = McpServer::GetInstance();
+    ToolGroup mcp("self.alarm", "Alarmas del robot (despertador con amanecer en pantalla y resumen de buenos días).");
 
     mcp.AddTool(
         "self.alarm.set",

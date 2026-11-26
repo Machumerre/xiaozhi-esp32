@@ -5,6 +5,7 @@
 #include "assets/lang_config.h"
 #include "display/display.h"
 #include "mcp_server.h"
+#include "tool_group.h"
 #include "screen_kit.h"
 #include "settings.h"
 
@@ -393,7 +394,7 @@ void AgendaScreen::ShowUpcoming(const std::vector<Event>& events, int64_t today,
 // ---------------------------------------------------------------------------
 
 void AgendaScreen::RegisterTools() {
-    auto& mcp = McpServer::GetInstance();
+    ToolGroup mcp("self.agenda", "Agenda y calendario del usuario en la pantalla del robot (los exámenes también aparecen).");
 
     mcp.AddTool(
         "self.agenda.add",

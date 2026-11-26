@@ -4,6 +4,7 @@
 #include "board.h"
 #include "display/display.h"
 #include "mcp_server.h"
+#include "tool_group.h"
 #include "settings.h"
 #include "web_search_format.h"
 
@@ -432,7 +433,7 @@ void WeatherScreen::TimerCallback(lv_timer_t* timer) {
 // --- Herramientas para la IA ----------------------------------------------------------
 
 void WeatherScreen::RegisterTools() {
-    auto& mcp = McpServer::GetInstance();
+    ToolGroup mcp("self.weather", "Tiempo meteorológico con iconos animados en la pantalla del robot.");
 
     mcp.AddTool(
         "self.weather.show",
