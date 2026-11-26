@@ -6,6 +6,7 @@
 #include "mcp_server.h"
 #include "settings.h"
 #include "wifi_board.h"
+#include "study_screens.h"
 
 #include <driver/i2c_master.h>
 #include <driver/spi_common.h>
@@ -47,6 +48,7 @@ private:
     Display* display_;
     EspVideo* camera_;
     light_mode_t light_mode_ = LIGHT_MODE_ALWAYS_ON;
+    StudyScreens* study_screens_ = nullptr;
 
     void InitializeI2c() {
         // Initialize I2C peripheral
@@ -288,6 +290,9 @@ public:
         InitializeCamera();
         InitializeEchoUart();
         InitializeTools();
+        // Pantallas propias: Pomodoro y cuenta atrás de exámenes
+        study_screens_ = new StudyScreens(display_);
+        study_screens_->RegisterTools();
         GetBacklight()->RestoreBrightness();
     }
 
