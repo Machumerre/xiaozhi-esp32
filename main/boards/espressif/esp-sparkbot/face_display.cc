@@ -4,6 +4,9 @@
 #include "application.h"
 #include "board.h"
 #include "companion.h"
+#include "backlight.h"
+#include "mcp_server.h"
+#include "settings.h"
 #include "assets/lang_config.h"
 #include "display/lvgl_display/lvgl_font.h"
 #include "screen_kit.h"
@@ -155,6 +158,7 @@ void SparkBotDisplay::BuildFace() {
     BuildStatusIcons();
     BuildClock();
     BuildFooter();
+    BuildNight();
     BuildBoot();
     BuildThinking();
     timer_ = lv_timer_create(&SparkBotDisplay::TimerCallback, 40, this);
@@ -363,6 +367,152 @@ bool SparkBotDisplay::AnimateBoot(int state_value) {
         }
     }
     return true;
+}
+
+// ---------------------------------------------------------------------------
+// Modo noche
+// ---------------------------------------------------------------------------
+
+void SparkBotDisplay::BuildNight() {
+    Settings settings("night", false);
+    night_enabled_ = settings.GetInt("on", 1) != 0;
+    night_start_ = settings.GetInt("start", night_start_);
+    night_end_ = settings.GetInt("end", night_end_);
+    // Tres "z" que suben y se desvanecen junto al ojo derecho
+    for (int i = 0; i < 3; ++i) {
+        zzz_[i] = kit::Text(face_, 176 + i * 12, 96, 20, i == 2 ? &font_mono_20 : &font_mono_14, 0x2E7F99);
+        lv_label_set_text(zzz_[i], "z");
+        lv_obj_add_flag(zzz_[i], LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+void SparkBotDisplay::UpdateNight(int state_value) {
+    const auto state = static_cast<DeviceState>(state_value);
+    if (state != kDeviceStateIdle) {
+        last_busy_tick_ = ticks_;
+    }
+    // La franja horaria se comprueba una vez por segundo
+    if (ticks_ % 25 == 0) {
+        const time_t now = time(nullptr);
+        struct tm local = {};
+        localtime_r(&now, &local);
+        const int minute = local.tm_hour * 60 + local.tm_min;
+        const bool in_window = night_start_ > night_end_ ? (minute >= night_start_ || minute < night_end_)
+                                                         : (minute >= night_start_ && minute < night_end_);
+        night_window_ = night_enabled_ && local.tm_year >= 2025 - 1900 && in_window;
+    }
+    // Se duerme 20 s después de la última conversación
+    const bool should_sleep = night_window_ && state == kDeviceStateIdle && !thinking_ &&
+                              ticks_ - last_busy_tick_ > 500;
+    if (should_sleep != night_active_) {
+        SetNight(should_sleep, state == kDeviceStateListening || state == kDeviceStateConnecting);
+    }
+}
+
+void SparkBotDisplay::SetNight(bool on, bool woke_by_voice) {
+    night_active_ = on;
+    const uint32_t clock_color = on ? 0x2E5560 : 0xE6F7FF;
+    kit::SetColor(clock_time_, clock_color);
+    kit::SetColor(clock_date_, on ? 0x1E3A44 : kit::kHudDim);
+    for (int i = 0; i < 3; ++i) {
+        if (on) {
+            lv_obj_remove_flag(zzz_[i], LV_OBJ_FLAG_HIDDEN);
+            kit::Loop(zzz_[i], kit::SetY, 104 - i * 6, 60 - i * 10, 2400, i * 800);
+            kit::Loop(zzz_[i], kit::SetOpacity, 255, 0, 2400, i * 800);
+        } else {
+            lv_anim_delete(zzz_[i], kit::SetY);
+            lv_anim_delete(zzz_[i], kit::SetOpacity);
+            lv_obj_add_flag(zzz_[i], LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+    if (on) {
+        lv_obj_add_flag(footer_, LV_OBJ_FLAG_HIDDEN);
+        shape_ = Shape::kSleepy;
+        emotion_color_ = 0x1F6F80;
+    } else {
+        shape_ = Shape::kNormal;
+        emotion_color_ = kCyan;
+        if (clock_visible_) {
+            lv_obj_remove_flag(footer_, LV_OBJ_FLAG_HIDDEN);
+        }
+        if (woke_by_voice) {
+            yawn_ticks_ = 40;  // bostezo de 1,6 segundos
+        }
+    }
+    ApplyShape();
+    last_color_ = 0xFFFFFFFF;
+    // El brillo se cambia desde la tarea principal
+    Application::GetInstance().Schedule([on]() {
+        auto backlight = Board::GetInstance().GetBacklight();
+        if (backlight == nullptr) return;
+        if (on) {
+            backlight->SetBrightness(6);
+        } else {
+            backlight->RestoreBrightness();
+        }
+    });
+}
+
+void SparkBotDisplay::AnimateYawn() {
+    yawn_ticks_--;
+    // Boca que se abre y se cierra, ojos entrecerrados
+    const int t = 40 - yawn_ticks_;
+    const int open = t < 20 ? t : 40 - t;
+    lv_obj_t* mouth = mouth_[3];
+    for (int i = 0; i < 7; ++i) {
+        if (i != 3) lv_obj_add_flag(mouth_[i], LV_OBJ_FLAG_HIDDEN);
+    }
+    lv_obj_remove_flag(mouth, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_size(mouth, 14 + open, 6 + open * 2);
+    lv_obj_set_style_radius(mouth, LV_RADIUS_CIRCLE, 0);
+    lv_obj_align(mouth, LV_ALIGN_CENTER, 0, kMouthY);
+    for (int i = 0; i < 2; ++i) {
+        lv_obj_set_height(eye_[i], std::max(10, 40 - open));
+    }
+    if (yawn_ticks_ <= 0) {
+        lv_obj_set_size(mouth, 6, 8);
+        lv_obj_set_style_radius(mouth, 3, 0);
+        lv_obj_align(mouth, LV_ALIGN_CENTER, 0, kMouthY);
+        lv_obj_add_flag(mouth, LV_OBJ_FLAG_HIDDEN);
+        ApplyShape();
+        last_color_ = 0xFFFFFFFF;
+    }
+}
+
+void SparkBotDisplay::RegisterTools() {
+    McpServer::GetInstance().AddTool(
+        "self.night_mode.set",
+        "Configura el modo noche del robot: entre 'start' y 'end' (HH:MM) la pantalla se atenúa y el robot se "
+        "duerme cuando nadie le habla. 'enabled' false lo desactiva. Configure night mode.",
+        PropertyList({
+            Property("start", kPropertyTypeString, std::string("23:30")),
+            Property("end", kPropertyTypeString, std::string("07:30")),
+            Property("enabled", kPropertyTypeBoolean, true),
+        }),
+        [this](const PropertyList& p) -> ToolResult {
+            int sh = 0, sm = 0, eh = 0, em = 0;
+            if (sscanf(p["start"].value<std::string>().c_str(), "%d:%d", &sh, &sm) != 2 ||
+                sscanf(p["end"].value<std::string>().c_str(), "%d:%d", &eh, &em) != 2 || sh < 0 || sh > 23 ||
+                eh < 0 || eh > 23 || sm < 0 || sm > 59 || em < 0 || em > 59) {
+                return std::unexpected(std::string("Horas no válidas; usa HH:MM"));
+            }
+            const bool enabled = p["enabled"].value<bool>();
+            {
+                Settings settings("night", true);
+                settings.SetInt("on", enabled ? 1 : 0);
+                settings.SetInt("start", sh * 60 + sm);
+                settings.SetInt("end", eh * 60 + em);
+            }
+            DisplayLockGuard lock(this);
+            night_enabled_ = enabled;
+            night_start_ = sh * 60 + sm;
+            night_end_ = eh * 60 + em;
+            ticks_ = ticks_ - ticks_ % 25 + 24;  // recalcula la franja enseguida
+            char text[96];
+            if (!enabled) return std::string("Modo noche desactivado.");
+            snprintf(text, sizeof(text), "Modo noche de %02d:%02d a %02d:%02d.", sh, sm, eh, em);
+            return std::string(text);
+        });
 }
 
 void SparkBotDisplay::BuildClock() {
@@ -647,6 +797,8 @@ void SparkBotDisplay::OnTimer() {
     const bool busy = state == kDeviceStateConnecting || state == kDeviceStateStarting ||
                       state == kDeviceStateActivating || state == kDeviceStateUpgrading;
 
+    UpdateNight(static_cast<int>(state));
+
     // Pensando: desde que entiende tu frase hasta que empieza a hablar (o conectando)
     if (state == kDeviceStateIdle || speaking || (thinking_ && lv_tick_elaps(think_start_ms_) > 30000)) {
         thinking_ = false;
@@ -681,9 +833,9 @@ void SparkBotDisplay::OnTimer() {
 
     // Mirada: cuando te escucha te mira de frente; si piensa, mira arriba a la derecha
     if (ticks_ >= next_gaze_) {
-        if (listening) {
+        if (listening || night_active_) {
             target_x_ = 0;
-            target_y_ = 0;
+            target_y_ = night_active_ ? 4 : 0;
         } else if (shape_ == Shape::kThinking) {
             target_x_ = 14;
             target_y_ = -10;
@@ -728,6 +880,11 @@ void SparkBotDisplay::OnTimer() {
                 next_blink_ = ticks_ + (RandomRange(0, 4) == 0 ? 6 : RandomRange(75, 125));
             }
         }
+    }
+
+    if (yawn_ticks_ > 0) {
+        AnimateYawn();
+        return;
     }
 
     // Boca: barras que se mueven mientras habla

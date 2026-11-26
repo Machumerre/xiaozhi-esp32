@@ -20,6 +20,9 @@ public:
     virtual bool SetEmotion(const char* emotion) override;
     virtual void SetChatMessage(const char* role, const char* content) override;
 
+    // Herramientas propias de la pantalla (modo noche)
+    void RegisterTools();
+
 private:
     enum class Shape { kNormal, kHappy, kSad, kAngry, kSurprised, kSleepy, kThinking, kWink };
 
@@ -86,6 +89,16 @@ private:
     int boot_ticks_ = 0;
     int boot_fade_ = -1;
 
+    // Modo noche: pantalla tenue, ojos dormidos y "zzz"; bosteza al despertar
+    bool night_enabled_ = true;
+    int night_start_ = 23 * 60 + 30;  // minutos desde medianoche
+    int night_end_ = 7 * 60 + 30;
+    bool night_window_ = false;
+    bool night_active_ = false;
+    uint32_t last_busy_tick_ = 0;
+    int yawn_ticks_ = 0;
+    lv_obj_t* zzz_[3] = {};
+
     // Reloj de reposo
     lv_obj_t* clock_ = nullptr;
     lv_obj_t* clock_time_ = nullptr;
@@ -101,6 +114,10 @@ private:
     void ShowLevelUp(int level);
     void AnimateLevelUp();
     void BuildBoot();
+    void BuildNight();
+    void UpdateNight(int state);
+    void SetNight(bool on, bool woke_by_voice);
+    void AnimateYawn();
     bool AnimateBoot(int state);
     void UpdateStatusIcons();
     void StyleSubtitles();

@@ -313,6 +313,7 @@ public:
         InitializeEchoUart();
         InitializeTools();
         // Pantallas propias: Pomodoro y cuenta atrás de exámenes
+        static_cast<SparkBotDisplay*>(display_)->RegisterTools();
         study_screens_ = new StudyScreens(display_);
         study_screens_->RegisterTools();
         weather_screen_ = new WeatherScreen(display_);
