@@ -76,14 +76,16 @@ lv_obj_t* CreateRoot() {
     return root;
 }
 
-void SetVisible(lv_obj_t* obj, bool visible) {
+void SetVisible(lv_obj_t* obj, bool visible, bool bring_front = true) {
     if (obj == nullptr) {
         return;
     }
     if (visible) {
         if (lv_obj_has_flag(obj, LV_OBJ_FLAG_HIDDEN)) {
             lv_obj_remove_flag(obj, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_move_foreground(obj);
+            if (bring_front) {
+                lv_obj_move_foreground(obj);
+            }
         }
     } else {
         lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
@@ -287,10 +289,10 @@ void StudyScreens::RenderLocked() {
     const int64_t now = esp_timer_get_time();
 
     const bool exam_active = exam_root_ != nullptr && now < exam_until_us_;
-    SetVisible(exam_root_, exam_active && idle);
+    SetVisible(exam_root_, exam_active);
 
     const bool pomo_visible = pomo_root_ != nullptr && phase_ != Phase::kOff && idle && !exam_active;
-    SetVisible(pomo_root_, pomo_visible);
+    SetVisible(pomo_root_, pomo_visible, false);  // no tapar la pantalla del tiempo
     if (!pomo_visible) {
         return;
     }

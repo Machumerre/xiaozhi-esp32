@@ -7,6 +7,7 @@
 #include "settings.h"
 #include "wifi_board.h"
 #include "study_screens.h"
+#include "weather_screen.h"
 #include "face_display.h"
 
 #include <driver/i2c_master.h>
@@ -50,6 +51,7 @@ private:
     EspVideo* camera_;
     light_mode_t light_mode_ = LIGHT_MODE_ALWAYS_ON;
     StudyScreens* study_screens_ = nullptr;
+    WeatherScreen* weather_screen_ = nullptr;
 
     void InitializeI2c() {
         // Initialize I2C peripheral
@@ -301,6 +303,8 @@ public:
         // Pantallas propias: Pomodoro y cuenta atrás de exámenes
         study_screens_ = new StudyScreens(display_);
         study_screens_->RegisterTools();
+        weather_screen_ = new WeatherScreen(display_);
+        weather_screen_->RegisterTools();
         GetBacklight()->RestoreBrightness();
     }
 
