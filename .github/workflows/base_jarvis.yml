@@ -1,0 +1,37 @@
+name: Base Jarvis (orugas)
+
+on:
+  push:
+    branches:
+      - ci/sparkbot-es
+    paths:
+      - 'base_jarvis/**'
+      - '.github/workflows/base_jarvis.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: espressif/idf:release-v6.1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Build base (ESP32-C3)
+        shell: bash
+        working-directory: base_jarvis
+        run: |
+          source "$IDF_PATH/export.sh"
+          idf.py set-target esp32c3
+          idf.py build
+          idf.py merge-bin -o merged-binary.bin
+          ls -la build/merged-binary.bin
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v7
+        with:
+          name: base-jarvis-esp32c3
+          path: base_jarvis/build/merged-binary.bin
+          if-no-files-found: error
+          retention-days: 7

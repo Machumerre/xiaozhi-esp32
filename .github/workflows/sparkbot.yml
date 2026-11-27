@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - ci/sparkbot-es
+    paths-ignore:
+      - 'base_jarvis/**'
+      - '.github/workflows/base_jarvis.yml'
   workflow_dispatch:
 
 jobs:
